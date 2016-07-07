@@ -1,4 +1,5 @@
 import urlparse
+import sys
 
 __author__ = 'Shashi'
 import requests
@@ -11,13 +12,14 @@ def SEARCH(QUERY):
     QUERY="index of mp3 "+QUERY
     header = {'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.9; rv:32.0) Gecko/20100101 Firefox/32.0',}
     page = requests.get("https://www.google.com/search?q="+QUERY,header)
+    #print page.text
     soup = BeautifulSoup(page.content)
     links = soup.findAll("a")
     LINKS=[]
     for a in soup.select('.r a'):
         LINKS.append(urlparse.parse_qs(urlparse.urlparse(a['href']).query)['q'][0])
     try:
-        return LINKS[:3]
+        return LINKS
     except:
         return LINKS
 
@@ -27,24 +29,27 @@ def SAVEMP3(url):
     u = urllib2.urlopen(url)
     f = open(file_name, 'wb')
     meta = u.info()
+
     file_size = int(meta.getheaders("Content-Length")[0])
-    print "Downloading: %s Bytes: %s" % (file_name, file_size)
+    if file_size>8192:
+        print "Going to Download: "+url
+        print "Downloading: %s Bytes: %s" % (file_name, file_size)
 
-    file_size_dl = 0
-    block_sz = 8192
-    while True:
-        buffer = u.read(block_sz)
-        if not buffer:
-            break
+        file_size_dl = 0
+        block_sz = 8192
+        while True:
+            buffer = u.read(block_sz)
+            if not buffer:
+                break
 
-        file_size_dl += len(buffer)
-        f.write(buffer)
-        status = r"%10d  [%3.2f%%]" % (file_size_dl, file_size_dl * 100. / file_size)
-        status = status + chr(8)*(len(status)+1)
-        print "\r"+status,
-    print
+            file_size_dl += len(buffer)
+            f.write(buffer)
+            status = r"%10d  [%3.2f%%]" % (file_size_dl, file_size_dl * 100. / file_size)
+            status = status + chr(8)*(len(status)+1)
+            print "\r"+status,
+        print
 
-    f.close()
+        f.close()
 
 def EXTRACT_MP3_LINKS(url):
     header = {'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.9; rv:32.0) Gecko/20100101 Firefox/32.0',}
@@ -56,11 +61,17 @@ def EXTRACT_MP3_LINKS(url):
         try:
             if ".mp3" in item['href']:
                 try:
-                    SAVEMP3(item['href'])
+                    response=requests.head(item['href'])
+
+                    if response.headers['content-type']=='audio/mpeg':
+                        SAVEMP3(item['href'])
                 except:
                     pass
                 try:
-                    SAVEMP3(url+item['href'])
+                    response=requests.head(url+item['href'])
+                    #print response
+                    if response.headers['content-type']=='audio/mpeg':
+                        SAVEMP3(url+item['href'])
                 except:
                     pass
         except:
@@ -78,7 +89,13 @@ def main():
     except:
         pass
     os.chdir(("SONGS/"+QUERY))
+
     for link in DOWNLOAD_SITES:
+        for dirpath, dirnames, files in os.walk('.'):
+            if files:
+                print "I think we have already explored few links, Press 1 to explore more links."
+                if raw_input()!='1':
+                    sys.exit()
         try:
             EXTRACT_MP3_LINKS(link)
             print link
